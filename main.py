@@ -1,18 +1,22 @@
 import sys, threading, textwrap
 import pygame
 import pyperclip
-import google.generativeai as genai
+from mistralai.client import Mistral
 
-# Free tier models (không cần billing):
-#   gemini-2.5-flash      – nhanh, thông minh, miễn phí
-#   gemini-2.5-flash-lite – nhanh nhất, nhẹ nhất, miễn phí
-#   gemini-2.5-pro        – mạnh nhất nhưng giới hạn thấp hơn
+# Mistral models:
+#   mistral-small-latest   – nhanh, tiết kiệm
+#   mistral-large-latest   – mạnh nhất, chính xác nhất
+#   open-mistral-7b        – mã nguồn mở, nhẹ
+#   open-mixtral-8x7b      – mã nguồn mở, cân bằng
+#   codestral-latest       – tối ưu cho code
 FREE_MODELS = [
-    "gemini-2.5-flash",
-    "gemini-2.5-flash-lite",
-    "gemini-2.5-pro",
+    "mistral-small-latest",
+    "mistral-large-latest",
+    "open-mistral-7b",
+    "open-mixtral-8x7b",
+    "codestral-latest",
 ]
-MODEL    = FREE_MODELS[0]   # mặc định: gemini-2.5-flash
+MODEL    = FREE_MODELS[0]   # mặc định: mistral-small-latest
 W, H     = 880, 680
 TOP_H    = 50
 APIKEY_H = 56
@@ -232,7 +236,7 @@ class TextInput:
 
 # ── App state ──────────────────────────────────────────────────────────────────
 model_idx    = 0   # index vào FREE_MODELS
-api_field    = TextInput(placeholder="AIza... hoặc sk-...  (Enter / Lưu để xác nhận)", password=True)
+api_field    = TextInput(placeholder="Mistral API key  (Enter / Lưu để xác nhận)", password=True)
 q_field      = TextInput(placeholder="Nhập câu hỏi rồi nhấn Enter hoặc Gửi…")
 api_key      = ""
 api_visible  = False
@@ -300,15 +304,10 @@ def total_chat_h():
 def call_api(history, model_name):
     global loading
     try:
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel(model_name)
-        gemini_history = []
-        for m in history[:-1]:
-            role = "model" if m["role"] == "assistant" else "user"
-            gemini_history.append({"role": role, "parts": [m["content"]]})
-        chat    = model.start_chat(history=gemini_history)
-        resp    = chat.send_message(history[-1]["content"])
-        messages.append({"role": "assistant", "content": resp.text or ""})
+        mistral_messages = [{"role": m["role"], "content": m["content"]} for m in history]
+        with Mistral(api_key=api_key) as client:
+            resp = client.chat.complete(model=model_name, messages=mistral_messages)
+        messages.append({"role": "assistant", "content": resp.choices[0].message.content or ""})
     except Exception as e:
         messages.append({"role": "assistant", "content": f"[Lỗi] {e}"})
     loading = False
